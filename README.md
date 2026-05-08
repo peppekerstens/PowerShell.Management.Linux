@@ -10,9 +10,7 @@ Part of the **Linux PowerShell Cmdlet Parity** project — inspired by Evgenij S
 
 On **Linux**, wraps native CLI tools (`systemctl`, `hostnamectl`, `shutdown`, `/proc`, `/etc/os-release`) to provide PowerShell cmdlets matching the Windows `Microsoft.PowerShell.Management` API as closely as possible.
 
-On **Windows**, every function delegates transparently to the built-in `Microsoft.PowerShell.Management` cmdlet — no behavioral change.
-
-> Note: 46 of the 60 cmdlets in `Microsoft.PowerShell.Management` (filesystem, process, timezone, etc.) already work natively in PowerShell 7 on Linux and are not included here. This module covers only the genuine gap.
+> **Note:** 46 of the 60 cmdlets in `Microsoft.PowerShell.Management` (filesystem, process, timezone, etc.) already work natively in PowerShell 7 on Linux and are not included here. This module covers only the genuine gap.
 
 ---
 
@@ -89,13 +87,76 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 
 ---
 
+## How we built this
+
+The starting point was figuring out what is actually missing. The Windows `Microsoft.PowerShell.Management` module exports 60 cmdlets. Many of them — all the filesystem and path cmdlets, process management, timezone — are implemented in cross-platform .NET and work fine in PowerShell 7 on Linux already. Wrapping those would just shadow the built-in implementations, which could cause subtle breakage. So the first task was a careful audit.
+
+After stripping out everything that already works, the gap is 15 cmdlets. Eight get full implementations, seven become stubs.
+
+### Service management: joining two systemctl outputs
+
+`Get-Service` on Windows returns rich objects with `Status`, `StartType`, `DisplayName` and more. On Linux, `systemctl` spreads this information across two separate commands:
+
+- `systemctl list-units --type=service --all` — tells you what is running right now (active/inactive/failed)
+- `systemctl list-unit-files --type=service` — tells you what is enabled/disabled/static
+
+Neither alone gives you the full picture. The implementation calls both, joins on the service name (stripping the `.service` suffix), maps the states, and returns a `PSCustomObject` with a shape matching `ServiceController` on Windows:
+
+```powershell
+$status    = 'active/running' → 'Running'
+$startType = 'enabled'        → 'Automatic'
+$startType = 'static'         → 'Manual'
+$startType = 'disabled'       → 'Disabled'
+```
+
+Services that appear in `list-unit-files` but not in `list-units` (never started, or inactive) are included with `Status = 'Stopped'`. This ensures the output matches what Windows returns for similar services.
+
+`Start-Service`, `Stop-Service` and `Restart-Service` are straightforward wrappers. They all support `-PassThru` (calls `Get-Service` after the operation and returns the updated object) and `SupportsShouldProcess` for `-WhatIf`/`-Confirm`.
+
+### Get-ComputerInfo: assembling from /proc
+
+On Windows, `Get-ComputerInfo` pulls everything from WMI in one call. On Linux, the equivalent data is scattered:
+
+| Windows property | Linux source |
+|---|---|
+| `OsName`, `OsVersion` | `/etc/os-release` |
+| `CsName` (hostname) | `hostnamectl` |
+| `CsTotalPhysicalMemory` | `/proc/meminfo` |
+| `CsNumberOfLogicalProcessors` | `/proc/cpuinfo` (count of `processor:` lines) |
+| `OsUptime` | `/proc/uptime` (seconds since boot → `[TimeSpan]`) |
+| `OsArchitecture` | `uname -m` |
+| `TimeZone` | `timedatectl` |
+
+The `-Property` parameter lets callers request specific properties. The implementation only reads the relevant sources for the requested properties — no need to run all sub-commands if you only want `OsName`.
+
+One gotcha during development: `CsNumberOfLogicalProcessors` was initially implemented as `CsNumberOfProcessors` (the physical core count from `lscpu`). These are different properties on Windows too. The fix required re-reading the Windows property names carefully.
+
+### Rename-Computer and the elevation check
+
+`hostnamectl set-hostname` requires root. The function checks `id -u` before calling it:
+
+```powershell
+if ((& id -u) -ne '0') {
+    throw 'Rename-Computer requires root privileges. Run with sudo.'
+}
+```
+
+This gives a clear error rather than letting `hostnamectl` fail with a confusing permission message.
+
+### The stubs
+
+`Resume-Service` and `Suspend-Service` exist in Windows to pause and resume services (think `SIGSTOP`/`SIGCONT`). Linux has those signals but there is no general-purpose way to implement them at the `systemctl` level — some services would handle it, others would crash. They get stubs for now. Same for `Set-Service`, `New-Service`, and `Remove-Service` — those have Linux equivalents (writing systemd unit files) but the parameter mapping is non-trivial and the use cases are uncommon enough that getting it wrong costs more than getting it right is worth.
+
+---
+
 ## Implementation notes
 
 - `Get-Service` joins output from `systemctl list-units` (running state) and `systemctl list-unit-files` (start type) on service name (`.service` suffix stripped).
-- Status mapping: `active` → `Running`, `inactive` → `Stopped`, `failed` → `Failed`.
+- Status mapping: `active/running` → `Running`, `active/exited` → `Stopped`, `inactive/dead` → `Stopped`, `failed/failed` → `Stopped`.
 - StartType mapping: `enabled` → `Automatic`, `disabled` → `Disabled`, `static` → `Manual`.
 - `Get-ComputerInfo` assembles a single `PSCustomObject` from multiple `/proc` and system files; `-Property` filters which properties are populated, skipping unnecessary reads.
 - `Rename-Computer` checks `id -u` for root before calling `hostnamectl`.
+- All write cmdlets use `SupportsShouldProcess` — `-WhatIf` and `-Confirm` work.
 
 ---
 
@@ -103,8 +164,8 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 
 | Version | Notes |
 |---|---|
-| 0.2.0 | Linux-only guard added (throws on Windows). `Get-ComputerInfo` gains `CsNumberOfLogicalProcessors` and `OsUptime` properties; `-Property` filter fixed. Tests rewritten for Pester 5.2+: 60/60 pass on WSL2, 0 skipped on Linux. |
-| 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer`, `Restart-Computer`, `Stop-Computer` implemented. Stubs for `Resume-Service`, `Suspend-Service`, `Set-Service`, `New-Service`, `Remove-Service`, `Get-HotFix`, `Clear-RecycleBin`. |
+| 0.2.0 | Linux-only guard added (throws on Windows). `Get-ComputerInfo` gains `CsNumberOfLogicalProcessors` and `OsUptime` properties; `-Property` filter fixed. Tests rewritten for Pester 5.2+: 60/60 pass on WSL2. |
+| 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer`, `Restart-Computer`, `Stop-Computer` implemented. Stubs for the remaining 7. |
 
 ---
 
