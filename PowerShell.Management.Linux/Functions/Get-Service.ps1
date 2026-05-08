@@ -40,13 +40,10 @@ function Get-Service {
         [string[]]$Exclude
     )
 
+    process {
     if (-not $IsLinux) {
         Microsoft.PowerShell.Management\Get-Service @PSBoundParameters
         return
-    }
-
-    if (-not (Get-Command systemctl -ErrorAction SilentlyContinue)) {
-        throw "Get-Service: 'systemctl' not found. This cmdlet requires systemd."
     }
 
     # --- Build a hash of startup types from list-unit-files ---
@@ -81,7 +78,6 @@ function Get-Service {
         $parts = $line -split '\s+', 5
         if ($parts.Count -lt 4) { continue }
         $unit        = $parts[0] -replace '\.service$', ''
-        $loadState   = $parts[1]
         $activeState = $parts[2]
         $subState    = $parts[3]
         $description = if ($parts.Count -ge 5) { $parts[4].Trim() } else { $unit }
@@ -164,4 +160,5 @@ function Get-Service {
     }
 
     $results
+    } # end process
 }

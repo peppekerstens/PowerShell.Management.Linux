@@ -45,7 +45,6 @@ function Stop-Service {
 
     process {
         if (-not $IsLinux) {
-            $params = @{}
             if ($PSCmdlet.ParameterSetName -eq 'InputObject') {
                 $InputObject | Microsoft.PowerShell.Management\Stop-Service -PassThru:$PassThru -Force:$Force
             } else {

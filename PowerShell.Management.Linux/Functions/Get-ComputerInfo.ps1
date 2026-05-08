@@ -1,4 +1,6 @@
 function Get-ComputerInfo {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'totalMemBytes', Justification = 'Variable is set inside ForEach-Object scriptblock and used in output object')]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'freeMemBytes', Justification = 'Variable is set inside ForEach-Object scriptblock and used in output object')]
     <#
     .Synopsis
         Gets a consolidated object of system and operating system properties.
@@ -83,7 +85,7 @@ function Get-ComputerInfo {
         $uptimeSeconds = [double]((Get-Content '/proc/uptime' -ErrorAction SilentlyContinue) -split '\s+')[0]
         $bootTime   = (Get-Date).AddSeconds(-$uptimeSeconds)
         $uptimeSpan = [TimeSpan]::FromSeconds($uptimeSeconds)
-    } catch {}
+    } catch { Write-Debug $_.Exception.Message }
 
     $info = [PSCustomObject]@{
         # OS info
