@@ -75,55 +75,54 @@ function Get-ComputerInfo {
         if ($chassisLine) { $chassis = ($chassisLine -replace '.*Chassis:\s*', '').Trim() }
     }
 
-    # Boot time from /proc/uptime or who -b
-    $bootTime = $null
+    # Boot time from /proc/uptime
+    $bootTime      = $null
+    $uptimeSpan    = $null
+    $uptimeSeconds = 0
     try {
         $uptimeSeconds = [double]((Get-Content '/proc/uptime' -ErrorAction SilentlyContinue) -split '\s+')[0]
-        $bootTime = (Get-Date).AddSeconds(-$uptimeSeconds)
+        $bootTime   = (Get-Date).AddSeconds(-$uptimeSeconds)
+        $uptimeSpan = [TimeSpan]::FromSeconds($uptimeSeconds)
     } catch {}
 
     $info = [PSCustomObject]@{
         # OS info
-        OsName                  = $osRelease['PRETTY_NAME']
-        OsType                  = $kernelName
-        OsVersion               = $kernelRelease
-        OsBuildNumber           = $kernelVersion
-        OsArchitecture          = $machine
-        OsLocale                = $env:LANG
-        CsName                  = $nodeName
-        CsDNSHostName           = $nodeName
-        CsDomain                = ''
-        CsWorkgroup             = ''
+        OsName                        = $osRelease['PRETTY_NAME']
+        OsType                        = $kernelName
+        OsVersion                     = $kernelRelease
+        OsBuildNumber                 = $kernelVersion
+        OsArchitecture                = $machine
+        OsLocale                      = $env:LANG
+        CsName                        = $nodeName
+        CsDNSHostName                 = $nodeName
+        CsDomain                      = ''
+        CsWorkgroup                   = ''
         # Hardware
-        CsNumberOfProcessors    = $processorCount
-        CsProcessors            = $processorName
-        CsTotalPhysicalMemory   = $totalMemBytes
-        OsFreePhysicalMemory    = $freeMemBytes
-        CsSystemType            = $machine
-        CsChassisType           = @($chassis)
-        # Dates
-        OsLastBootUpTime        = $bootTime
-        OsInstallDate           = $null
+        CsNumberOfProcessors          = 1   # physical CPU sockets
+        CsNumberOfLogicalProcessors   = $processorCount
+        CsProcessors                  = $processorName
+        CsTotalPhysicalMemory         = $totalMemBytes
+        OsFreePhysicalMemory          = $freeMemBytes
+        CsSystemType                  = $machine
+        CsChassisType                 = @($chassis)
+        # Dates / uptime
+        OsLastBootUpTime              = $bootTime
+        OsUptime                      = $uptimeSpan
+        OsInstallDate                 = $null
         # Distro specifics
-        OsDistribution          = $osRelease['NAME']
-        OsDistributionVersion   = $osRelease['VERSION_ID']
-        OsDistributionID        = $osRelease['ID']
+        OsDistribution                = $osRelease['NAME']
+        OsDistributionVersion         = $osRelease['VERSION_ID']
+        OsDistributionID              = $osRelease['ID']
         # PS compatibility props
-        WindowsCurrentVersion   = $null
-        WindowsEditionId        = $null
-        WindowsInstallationType = $null
-        WindowsProductName      = $osRelease['PRETTY_NAME']
-        WindowsVersion          = $null
+        WindowsCurrentVersion         = $null
+        WindowsEditionId              = $null
+        WindowsInstallationType       = $null
+        WindowsProductName            = $osRelease['PRETTY_NAME']
+        WindowsVersion                = $null
     }
 
     if ($PSBoundParameters.ContainsKey('Property')) {
-        $selected = [ordered]@{}
-        foreach ($prop in $Property) {
-            $info.PSObject.Properties |
-                Where-Object { $_.Name -like $prop } |
-                ForEach-Object { $selected[$_.Name] = $_.Value }
-        }
-        [PSCustomObject]$selected
+        $info | Select-Object -Property $Property
     } else {
         $info
     }

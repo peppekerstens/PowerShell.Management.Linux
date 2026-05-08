@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.2.0' }
 
 <#
 .SYNOPSIS
@@ -6,23 +6,45 @@
 .DESCRIPTION
     Tests module surface (function/alias counts), implemented cmdlet behaviour,
     and per-stub exported/no-throw/emits-warning checks.
-    Linux-only contexts are skipped when running on Windows.
+    All tests require Linux — the module refuses to load on Windows by design.
+    Describe blocks that require the module are skipped automatically on Windows.
+    Run with: Invoke-Pester ./PowerShell.Management.Linux.Tests.ps1 -Output Detailed
 #>
 
+BeforeDiscovery {
+    $script:OnLinux = $IsLinux
+
+    $script:ExpectedFunctions = @(
+        'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
+        'Get-ComputerInfo', 'Rename-Computer', 'Restart-Computer', 'Stop-Computer',
+        'Resume-Service', 'Suspend-Service', 'Set-Service',
+        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+    )
+
+    $script:StubFunctions = @(
+        'Resume-Service', 'Suspend-Service', 'Set-Service',
+        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+    )
+}
+
 BeforeAll {
-    $ModulePath = Join-Path $PSScriptRoot 'PowerShell.Management.Linux.psd1'
-    Import-Module $ModulePath -Force
+    if ($IsLinux) {
+        $ModulePath = Join-Path $PSScriptRoot 'PowerShell.Management.Linux.psd1'
+        Import-Module $ModulePath -Force
+    }
 }
 
 AfterAll {
-    Remove-Module PowerShell.Management.Linux -ErrorAction SilentlyContinue
+    if ($IsLinux) {
+        Remove-Module PowerShell.Management.Linux -ErrorAction SilentlyContinue
+    }
 }
 
 # ---------------------------------------------------------------------------
 # Module surface
 # ---------------------------------------------------------------------------
 
-Describe 'PowerShell.Management.Linux module surface' {
+Describe 'PowerShell.Management.Linux module surface' -Skip:(-not $script:OnLinux) {
 
     It 'exports exactly 15 functions' {
         (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 15
@@ -32,14 +54,7 @@ Describe 'PowerShell.Management.Linux module surface' {
         (Get-Module PowerShell.Management.Linux).ExportedAliases.Count | Should -Be 0
     }
 
-    $expectedFunctions = @(
-        'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
-        'Get-ComputerInfo', 'Rename-Computer', 'Restart-Computer', 'Stop-Computer',
-        'Resume-Service', 'Suspend-Service', 'Set-Service',
-        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
-    )
-
-    It "exports function '<fn>'" -TestCases ($expectedFunctions | ForEach-Object { @{ fn = $_ } }) {
+    It "exports function '<fn>'" -TestCases ($script:ExpectedFunctions | ForEach-Object { @{ fn = $_ } }) {
         (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain $fn
     }
 }
@@ -145,7 +160,7 @@ Describe 'Get-ComputerInfo' -Skip:(-not $IsLinux) {
 
     It 'supports -Property filter and returns only requested properties' {
         $info = Get-ComputerInfo -Property OsName, CsName
-        $info.PSObject.Properties.Count | Should -Be 2
+        ($info.PSObject.Properties | Measure-Object).Count | Should -Be 2
         $info.PSObject.Properties.Name | Should -Contain 'OsName'
         $info.PSObject.Properties.Name | Should -Contain 'CsName'
     }
@@ -186,25 +201,18 @@ Describe 'Stop-Computer' -Skip:(-not $IsLinux) {
 # Stub functions — per-stub: exported, no-throw, emits-warning
 # ---------------------------------------------------------------------------
 
-Describe 'Stub functions' {
+Describe 'Stub functions' -Skip:(-not $script:OnLinux) {
 
-    $stubs = @(
-        'Resume-Service', 'Suspend-Service', 'Set-Service',
-        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
-    )
-
-    It "'<fn>' is exported" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
+    It "'<fn>' is exported" -TestCases ($script:StubFunctions | ForEach-Object { @{ fn = $_ } }) {
         (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain $fn
     }
 
-    if ($IsLinux) {
-        It "'<fn>' does not throw on Linux" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
-            { & $fn } | Should -Not -Throw
-        }
+    It "'<fn>' does not throw on Linux" -TestCases ($script:StubFunctions | ForEach-Object { @{ fn = $_ } }) {
+        { & $fn } | Should -Not -Throw
+    }
 
-        It "'<fn>' emits a warning on Linux" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
-            $warnings = & { & $fn } 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
-            $warnings | Should -Not -BeNullOrEmpty
-        }
+    It "'<fn>' emits a warning on Linux" -TestCases ($script:StubFunctions | ForEach-Object { @{ fn = $_ } }) {
+        $warnings = & { & $fn } 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+        $warnings | Should -Not -BeNullOrEmpty
     }
 }
