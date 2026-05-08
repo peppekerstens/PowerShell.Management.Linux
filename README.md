@@ -19,6 +19,7 @@ On **Windows**, every function delegates transparently to the built-in `Microsof
 ## Requirements
 
 - PowerShell 7.2+
+- **Linux only** — the module refuses to load on Windows (throws a descriptive error)
 - Linux with `systemd` (`systemctl`, `hostnamectl`) — Ubuntu 20.04+, Debian 11+, etc.
 - Root / `sudo` required for `Rename-Computer`, `Restart-Computer`, `Stop-Computer`
 
@@ -102,6 +103,7 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 
 | Version | Notes |
 |---|---|
+| 0.2.0 | Linux-only guard added (throws on Windows). `Get-ComputerInfo` gains `CsNumberOfLogicalProcessors` and `OsUptime` properties; `-Property` filter fixed. Tests rewritten for Pester 5.2+: 60/60 pass on WSL2, 0 skipped on Linux. |
 | 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer`, `Restart-Computer`, `Stop-Computer` implemented. Stubs for `Resume-Service`, `Suspend-Service`, `Set-Service`, `New-Service`, `Remove-Service`, `Get-HotFix`, `Clear-RecycleBin`. |
 
 ---
