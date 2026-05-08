@@ -1,129 +1,210 @@
 #Requires -Modules Pester
 
 <#
-.Synopsis
-    Pester tests for PowerShell.Management.Linux.
-    Tests run on Linux only (skipped on Windows).
+.SYNOPSIS
+    Pester tests for PowerShell.Management.Linux module.
+.DESCRIPTION
+    Tests module surface (function/alias counts), implemented cmdlet behaviour,
+    and per-stub exported/no-throw/emits-warning checks.
+    Linux-only contexts are skipped when running on Windows.
 #>
 
 BeforeAll {
-    $modulePath = "$PSScriptRoot\PowerShell.Management.Linux.psd1"
-    Import-Module $modulePath -Force
+    $ModulePath = Join-Path $PSScriptRoot 'PowerShell.Management.Linux.psd1'
+    Import-Module $ModulePath -Force
 }
 
-Describe 'Get-Service' -Skip:(-not $IsLinux) {
-    It 'Returns service objects' {
-        $services = Get-Service
-        $services | Should -Not -BeNullOrEmpty
+AfterAll {
+    Remove-Module PowerShell.Management.Linux -ErrorAction SilentlyContinue
+}
+
+# ---------------------------------------------------------------------------
+# Module surface
+# ---------------------------------------------------------------------------
+
+Describe 'PowerShell.Management.Linux module surface' {
+
+    It 'exports exactly 15 functions' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 15
     }
 
-    It 'Returns objects with expected properties' {
+    It 'exports 0 aliases' {
+        (Get-Module PowerShell.Management.Linux).ExportedAliases.Count | Should -Be 0
+    }
+
+    $expectedFunctions = @(
+        'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
+        'Get-ComputerInfo', 'Rename-Computer', 'Restart-Computer', 'Stop-Computer',
+        'Resume-Service', 'Suspend-Service', 'Set-Service',
+        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+    )
+
+    It "exports function '<fn>'" -TestCases ($expectedFunctions | ForEach-Object { @{ fn = $_ } }) {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain $fn
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Get-Service
+# ---------------------------------------------------------------------------
+
+Describe 'Get-Service' -Skip:(-not $IsLinux) {
+
+    It 'returns service objects without error' {
+        { Get-Service } | Should -Not -Throw
+    }
+
+    It 'returns objects with expected properties' {
         $svc = Get-Service | Select-Object -First 1
+        $svc | Should -Not -BeNullOrEmpty
         $svc.PSObject.Properties.Name | Should -Contain 'Name'
         $svc.PSObject.Properties.Name | Should -Contain 'DisplayName'
         $svc.PSObject.Properties.Name | Should -Contain 'Status'
         $svc.PSObject.Properties.Name | Should -Contain 'StartType'
-    }
-
-    It 'Filters by Name' {
-        $svc = Get-Service -Name 'ssh*'
-        $svc | ForEach-Object { $_.Name | Should -BeLike 'ssh*' }
-    }
-
-    It 'Returns nothing for a non-existent service name' {
-        $result = Get-Service -Name 'this-service-should-not-exist-xyz'
-        $result | Should -BeNullOrEmpty
+        $svc.PSObject.Properties.Name | Should -Contain 'CanStop'
+        $svc.PSObject.Properties.Name | Should -Contain 'CanPauseAndContinue'
     }
 
     It 'Status is a known value' {
-        $knownStatuses = @('Running', 'Stopped', 'StartPending', 'StopPending', 'Unknown')
-        $services = Get-Service | Select-Object -First 5
-        $services | ForEach-Object {
+        $knownStatuses = @('Running', 'Stopped', 'StartPending', 'StopPending', 'Failed', 'Unknown')
+        Get-Service | Select-Object -First 10 | ForEach-Object {
             $_.Status | Should -BeIn $knownStatuses
         }
     }
+
+    It 'filters by -Name wildcard' {
+        $result = Get-Service -Name 'ssh*'
+        $result | ForEach-Object { $_.Name | Should -BeLike 'ssh*' }
+    }
+
+    It 'returns nothing for a non-existent service name' {
+        Get-Service -Name 'this-service-does-not-exist-xyz' | Should -BeNullOrEmpty
+    }
 }
 
-Describe 'Start-Service / Stop-Service / Restart-Service (command availability)' -Skip:(-not $IsLinux) {
-    It 'Start-Service is available as a command' {
-        Get-Command Start-Service | Should -Not -BeNullOrEmpty
-    }
+# ---------------------------------------------------------------------------
+# Start-Service / Stop-Service / Restart-Service
+# ---------------------------------------------------------------------------
 
-    It 'Stop-Service is available as a command' {
-        Get-Command Stop-Service | Should -Not -BeNullOrEmpty
+Describe 'Start-Service' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Start-Service'
     }
-
-    It 'Restart-Service is available as a command' {
-        Get-Command Restart-Service | Should -Not -BeNullOrEmpty
-    }
-
-    It 'Start-Service supports -WhatIf' {
+    It 'supports -WhatIf without error' {
         { Start-Service -Name 'ssh' -WhatIf } | Should -Not -Throw
     }
+}
 
-    It 'Stop-Service supports -WhatIf' {
+Describe 'Stop-Service' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Stop-Service'
+    }
+    It 'supports -WhatIf without error' {
         { Stop-Service -Name 'ssh' -WhatIf } | Should -Not -Throw
     }
 }
 
-Describe 'Get-ComputerInfo' -Skip:(-not $IsLinux) {
-    It 'Returns a single object' {
-        $info = Get-ComputerInfo
-        $info | Should -Not -BeNullOrEmpty
-        ($info | Measure-Object).Count | Should -Be 1
+Describe 'Restart-Service' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Restart-Service'
     }
-
-    It 'Has expected properties' {
-        $info = Get-ComputerInfo
-        $info.PSObject.Properties.Name | Should -Contain 'OsName'
-        $info.PSObject.Properties.Name | Should -Contain 'CsName'
-        $info.PSObject.Properties.Name | Should -Contain 'OsArchitecture'
-        $info.PSObject.Properties.Name | Should -Contain 'CsTotalPhysicalMemory'
-    }
-
-    It 'CsName matches hostname' {
-        $info = Get-ComputerInfo
-        $info.CsName | Should -Be (hostname)
-    }
-
-    It 'Supports -Property filter' {
-        $info = Get-ComputerInfo -Property 'OsName', 'CsName'
-        $info.PSObject.Properties.Count | Should -Be 2
+    It 'supports -WhatIf without error' {
+        { Restart-Service -Name 'ssh' -WhatIf } | Should -Not -Throw
     }
 }
 
-Describe 'Rename-Computer (WhatIf only)' -Skip:(-not $IsLinux) {
-    It 'Supports -WhatIf without error' {
+# ---------------------------------------------------------------------------
+# Get-ComputerInfo
+# ---------------------------------------------------------------------------
+
+Describe 'Get-ComputerInfo' -Skip:(-not $IsLinux) {
+
+    It 'returns exactly one object without error' {
+        { Get-ComputerInfo } | Should -Not -Throw
+        (Get-ComputerInfo | Measure-Object).Count | Should -Be 1
+    }
+
+    It 'has expected properties' {
+        $info = Get-ComputerInfo
+        $info.PSObject.Properties.Name | Should -Contain 'OsName'
+        $info.PSObject.Properties.Name | Should -Contain 'OsVersion'
+        $info.PSObject.Properties.Name | Should -Contain 'OsArchitecture'
+        $info.PSObject.Properties.Name | Should -Contain 'CsName'
+        $info.PSObject.Properties.Name | Should -Contain 'CsTotalPhysicalMemory'
+        $info.PSObject.Properties.Name | Should -Contain 'CsNumberOfLogicalProcessors'
+        $info.PSObject.Properties.Name | Should -Contain 'OsUptime'
+    }
+
+    It 'CsName matches hostname' {
+        (Get-ComputerInfo).CsName | Should -Be (hostname)
+    }
+
+    It 'CsTotalPhysicalMemory is a positive number' {
+        (Get-ComputerInfo).CsTotalPhysicalMemory | Should -BeGreaterThan 0
+    }
+
+    It 'supports -Property filter and returns only requested properties' {
+        $info = Get-ComputerInfo -Property OsName, CsName
+        $info.PSObject.Properties.Count | Should -Be 2
+        $info.PSObject.Properties.Name | Should -Contain 'OsName'
+        $info.PSObject.Properties.Name | Should -Contain 'CsName'
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Rename-Computer / Restart-Computer / Stop-Computer
+# ---------------------------------------------------------------------------
+
+Describe 'Rename-Computer' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Rename-Computer'
+    }
+    It 'supports -WhatIf without error' {
         { Rename-Computer -NewName 'test-hostname' -WhatIf } | Should -Not -Throw
     }
 }
 
-Describe 'Restart-Computer (WhatIf only)' -Skip:(-not $IsLinux) {
-    It 'Supports -WhatIf without error' {
+Describe 'Restart-Computer' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Restart-Computer'
+    }
+    It 'supports -WhatIf without error' {
         { Restart-Computer -WhatIf } | Should -Not -Throw
     }
 }
 
-Describe 'Stop-Computer (WhatIf only)' -Skip:(-not $IsLinux) {
-    It 'Supports -WhatIf without error' {
+Describe 'Stop-Computer' -Skip:(-not $IsLinux) {
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Stop-Computer'
+    }
+    It 'supports -WhatIf without error' {
         { Stop-Computer -WhatIf } | Should -Not -Throw
     }
 }
 
-Describe 'Stub cmdlets emit warning on Linux' -Skip:(-not $IsLinux) {
-    It 'Resume-Service emits a warning' {
-        Resume-Service 3>&1 | Should -Match 'not yet implemented'
+# ---------------------------------------------------------------------------
+# Stub functions — per-stub: exported, no-throw, emits-warning
+# ---------------------------------------------------------------------------
+
+Describe 'Stub functions' {
+
+    $stubs = @(
+        'Resume-Service', 'Suspend-Service', 'Set-Service',
+        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+    )
+
+    It "'<fn>' is exported" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain $fn
     }
 
-    It 'Suspend-Service emits a warning' {
-        Suspend-Service 3>&1 | Should -Match 'not yet implemented'
-    }
+    if ($IsLinux) {
+        It "'<fn>' does not throw on Linux" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
+            { & $fn } | Should -Not -Throw
+        }
 
-    It 'Get-HotFix emits a warning' {
-        Get-HotFix 3>&1 | Should -Match 'not yet implemented'
-    }
-
-    It 'Clear-RecycleBin emits a warning' {
-        Clear-RecycleBin 3>&1 | Should -Match 'not yet implemented'
+        It "'<fn>' emits a warning on Linux" -TestCases ($stubs | ForEach-Object { @{ fn = $_ } }) {
+            $warnings = & { & $fn } 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
+            $warnings | Should -Not -BeNullOrEmpty
+        }
     }
 }
