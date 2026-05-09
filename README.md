@@ -1,5 +1,7 @@
 # PowerShell.Management.Linux
 
+[![Pester Tests](https://github.com/peppekerstens/PowerShell.Management.Linux/actions/workflows/pester.yml/badge.svg)](https://github.com/peppekerstens/PowerShell.Management.Linux/actions/workflows/pester.yml)
+
 PowerShell 7.x module providing cmdlet parity with `Microsoft.PowerShell.Management` on Linux. Implements service management, computer information and computer control cmdlets that are missing or non-functional on Linux.
 
 Part of the **Linux PowerShell Cmdlet Parity** project — inspired by Evgenij Smirnov's [2025 European PowerShell Summit session](https://www.youtube.com/watch?v=RlzinWYIjBY) and documented in the blog series at [peppekerstens.github.io](https://peppekerstens.github.io/linux-command-wrapping-part-1/).
@@ -158,6 +160,28 @@ This gives a clear error rather than letting `hostnamectl` fail with a confusing
 - `Rename-Computer` checks `id -u` for root before calling `hostnamectl`.
 - All write cmdlets use `SupportsShouldProcess` — `-WhatIf` and `-Confirm` work.
 
+---
+
+## CI / Testing
+
+Tested across 5 Linux distributions in containers:
+
+| Distro | Image |
+|---|---|
+| Ubuntu 24.04 | `ghcr.io/peppekerstens/testinfra:ubuntu-24.04` |
+| Debian 12 | `ghcr.io/peppekerstens/testinfra:debian-12` |
+| Fedora 40 | `ghcr.io/peppekerstens/testinfra:fedora-40` |
+| openSUSE Tumbleweed | `ghcr.io/peppekerstens/testinfra:opensuse-tumbleweed` |
+| Arch Linux | `ghcr.io/peppekerstens/testinfra:arch-latest` |
+
+Run locally with:
+
+```powershell
+# From the repo root
+docker compose -f docker-compose.test.yml up --abort-on-container-exit
+```
+
+GitHub Actions runs the same matrix on every push — see `.github/workflows/pester.yml`.
 ---
 
 ## Version history
