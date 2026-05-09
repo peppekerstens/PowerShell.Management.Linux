@@ -97,10 +97,10 @@ After stripping out everything that already works, the gap is 15 cmdlets. Eight 
 
 `Get-Service` on Windows returns rich objects with `Status`, `StartType`, `DisplayName` and more. On Linux, `systemctl` spreads this information across two separate commands:
 
-- `systemctl list-units --type=service --all` — tells you what is running right now (active/inactive/failed)
-- `systemctl list-unit-files --type=service` — tells you what is enabled/disabled/static
+- `systemctl list-units --type=service --all --output=json` — tells you what is running right now (active/inactive/failed) with description
+- `systemctl list-unit-files --type=service --output=json` — tells you what is enabled/disabled/static
 
-Neither alone gives you the full picture. The implementation calls both, joins on the service name (stripping the `.service` suffix), maps the states, and returns a `PSCustomObject` with a shape matching `ServiceController` on Windows:
+Both commands support `--output=json` (systemd 240+), so no text splitting or column-width fragility. The implementation calls both, joins on the service name (stripping the `.service` suffix), maps the states, and returns a `PSCustomObject` with a shape matching `ServiceController` on Windows:
 
 ```powershell
 $status    = 'active/running' → 'Running'
@@ -109,7 +109,7 @@ $startType = 'static'         → 'Manual'
 $startType = 'disabled'       → 'Disabled'
 ```
 
-Services that appear in `list-unit-files` but not in `list-units` (never started, or inactive) are included with `Status = 'Stopped'`. This ensures the output matches what Windows returns for similar services.
+A `HashSet` tracks which names appeared in `list-units`. Services that appear in `list-unit-files` but not in `list-units` (never started, or inactive) are added separately with `Status = 'Stopped'`. This ensures the output matches what Windows returns for similar services.
 
 `Start-Service`, `Stop-Service` and `Restart-Service` are straightforward wrappers. They all support `-PassThru` (calls `Get-Service` after the operation and returns the updated object) and `SupportsShouldProcess` for `-WhatIf`/`-Confirm`.
 
@@ -151,7 +151,7 @@ This gives a clear error rather than letting `hostnamectl` fail with a confusing
 
 ## Implementation notes
 
-- `Get-Service` joins output from `systemctl list-units` (running state) and `systemctl list-unit-files` (start type) on service name (`.service` suffix stripped).
+- `Get-Service` uses `systemctl list-units --output=json` (running state) and `list-unit-files --output=json` (start type) joined on service name (`.service` suffix stripped). JSON parsing eliminates column-width fragility from earlier text-split approach.
 - Status mapping: `active/running` → `Running`, `active/exited` → `Stopped`, `inactive/dead` → `Stopped`, `failed/failed` → `Stopped`.
 - StartType mapping: `enabled` → `Automatic`, `disabled` → `Disabled`, `static` → `Manual`.
 - `Get-ComputerInfo` assembles a single `PSCustomObject` from multiple `/proc` and system files; `-Property` filters which properties are populated, skipping unnecessary reads.
@@ -164,6 +164,7 @@ This gives a clear error rather than letting `hostnamectl` fail with a confusing
 
 | Version | Notes |
 |---|---|
+| 0.3.0 | `Get-Service` rewritten to use `systemctl list-units/list-unit-files --output=json`. Eliminates text-split column parsing; `HashSet` replaces linear `Where-Object` for duplicate detection. |
 | 0.2.0 | Linux-only guard added (throws on Windows). `Get-ComputerInfo` gains `CsNumberOfLogicalProcessors` and `OsUptime` properties; `-Property` filter fixed. Tests rewritten for Pester 5.2+: 60/60 pass on WSL2. |
 | 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer`, `Restart-Computer`, `Stop-Computer` implemented. Stubs for the remaining 7. |
 
