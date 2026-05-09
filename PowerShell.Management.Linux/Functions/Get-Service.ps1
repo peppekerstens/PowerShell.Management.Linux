@@ -46,75 +46,71 @@ function Get-Service {
         return
     }
 
-    # --- Build a hash of startup types from list-unit-files ---
-    $startupHash = @{}
-    $unitFileLines = systemctl list-unit-files --type=service --no-pager --no-legend --plain 2>$null
-    foreach ($line in $unitFileLines) {
-        $parts = $line -split '\s+', 3
-        if ($parts.Count -ge 2) {
-            $unitName = $parts[0] -replace '\.service$', ''
-            $state    = $parts[1]
-            $startType = switch ($state) {
-                'enabled'          { 'Automatic' }
-                'enabled-runtime'  { 'Automatic' }
-                'static'           { 'Manual' }
-                'indirect'         { 'Manual' }
-                'disabled'         { 'Disabled' }
-                'masked'           { 'Disabled' }
-                'generated'        { 'Manual' }
-                'transient'        { 'Manual' }
-                default            { 'Unknown' }
+    # --- Build a hash of startup types from list-unit-files (JSON) ---
+    $startupHash   = @{}
+    $unitFileJson  = systemctl list-unit-files --type=service --output=json --no-pager 2>$null
+    if ($unitFileJson) {
+        ($unitFileJson | ConvertFrom-Json) | ForEach-Object {
+            $unitName  = $_.unit_file -replace '\.service$', ''
+            $startType = switch ($_.state) {
+                'enabled'         { 'Automatic' }
+                'enabled-runtime' { 'Automatic' }
+                'static'          { 'Manual' }
+                'indirect'        { 'Manual' }
+                'disabled'        { 'Disabled' }
+                'masked'          { 'Disabled' }
+                'generated'       { 'Manual' }
+                'transient'       { 'Manual' }
+                default           { 'Unknown' }
             }
             $startupHash[$unitName] = $startType
         }
     }
 
-    # --- Build a hash of display names and states from list-units --all ---
-    $unitLines = systemctl list-units --type=service --all --no-pager --no-legend --plain 2>$null
+    # --- Build service objects from list-units --all (JSON) ---
+    $unitJson       = systemctl list-units --type=service --all --output=json --no-pager 2>$null
+    $seenNames      = [System.Collections.Generic.HashSet[string]]::new()
     $serviceObjects = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-    foreach ($line in $unitLines) {
-        # Format: UNIT LOAD ACTIVE SUB DESCRIPTION
-        $parts = $line -split '\s+', 5
-        if ($parts.Count -lt 4) { continue }
-        $unit        = $parts[0] -replace '\.service$', ''
-        $activeState = $parts[2]
-        $subState    = $parts[3]
-        $description = if ($parts.Count -ge 5) { $parts[4].Trim() } else { $unit }
+    if ($unitJson) {
+        ($unitJson | ConvertFrom-Json) | ForEach-Object {
+            $unit        = $_.unit -replace '\.service$', ''
+            $activeState = $_.active
+            $subState    = $_.sub
+            $description = if ($_.description) { $_.description } else { $unit }
 
-        # Skip non-loaded placeholder entries (e.g. lines with ● prefix)
-        if ($unit -match '^\s*$') { continue }
+            $status = switch ("$activeState/$subState") {
+                'active/running'    { 'Running' }
+                'active/exited'     { 'Stopped' }
+                'active/mounted'    { 'Running' }
+                'inactive/dead'     { 'Stopped' }
+                'failed/failed'     { 'Stopped' }
+                'activating/start'  { 'StartPending' }
+                'deactivating/stop' { 'StopPending' }
+                default             { 'Stopped' }
+            }
 
-        $status = switch ("$activeState/$subState") {
-            'active/running'   { 'Running' }
-            'active/exited'    { 'Stopped' }
-            'active/mounted'   { 'Running' }
-            'inactive/dead'    { 'Stopped' }
-            'failed/failed'    { 'Stopped' }
-            'activating/start' { 'StartPending' }
-            'deactivating/stop'{ 'StopPending' }
-            default            { 'Stopped' }
+            $startType = if ($startupHash.ContainsKey($unit)) { $startupHash[$unit] } else { 'Unknown' }
+            [void]$seenNames.Add($unit)
+
+            $serviceObjects.Add([PSCustomObject]@{
+                Name                = $unit
+                DisplayName         = $description
+                Status              = [string]$status
+                StartType           = [string]$startType
+                ServiceType         = 'Own'
+                CanStop             = ($status -eq 'Running')
+                CanPauseAndContinue = $false
+                CanShutdown         = $false
+                DependentServices   = @()
+                ServicesDependedOn  = @()
+            })
         }
-
-        $startType = if ($startupHash.ContainsKey($unit)) { $startupHash[$unit] } else { 'Unknown' }
-
-        $serviceObjects.Add([PSCustomObject]@{
-            Name                = $unit
-            DisplayName         = $description
-            Status              = [string]$status
-            StartType           = [string]$startType
-            ServiceType         = 'Own'
-            CanStop             = ($status -eq 'Running')
-            CanPauseAndContinue = $false
-            CanShutdown         = $false
-            DependentServices   = @()
-            ServicesDependedOn  = @()
-        })
     }
 
     # Also add services that appear in unit-files but weren't in list-units (inactive/never started)
     foreach ($unitName in $startupHash.Keys) {
-        if (-not ($serviceObjects | Where-Object { $_.Name -eq $unitName })) {
+        if (-not $seenNames.Contains($unitName)) {
             $serviceObjects.Add([PSCustomObject]@{
                 Name                = $unitName
                 DisplayName         = $unitName
