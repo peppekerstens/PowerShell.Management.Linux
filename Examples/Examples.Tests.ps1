@@ -189,3 +189,39 @@ Describe 'Get-SystemHealthReport' {
         $sumFromGroups | Should -Be $all.Count
     }
 }
+
+Describe 'Scenario: Service install/start/stop/remove lifecycle' -Skip:(-not $IsLinux) {
+    BeforeAll {
+        $modulePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'PowerShell.Management.Linux' 'PowerShell.Management.Linux.psd1'
+        Import-Module $modulePath -Force -ErrorAction Stop
+        $script:svcName = 'pester-test-svc'
+    }
+    AfterAll {
+        # Best-effort cleanup
+        & systemctl stop    $script:svcName 2>$null
+        & systemctl disable $script:svcName 2>$null
+        Remove-Service -Name $script:svcName -ErrorAction SilentlyContinue
+        Remove-Module 'PowerShell.Management.Linux' -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'New-Service creates a systemd unit for a simple oneshot' {
+        { New-Service -Name $script:svcName -BinaryPathName '/bin/true' -Description 'Pester test service' } |
+            Should -Not -Throw
+        & systemctl cat $script:svcName 2>&1 | Should -Match 'ExecStart'
+    }
+    It 'Get-Service finds the new service' {
+        $svc = Get-Service -Name $script:svcName
+        $svc | Should -Not -BeNullOrEmpty
+        $svc.Name | Should -Be $script:svcName
+    }
+    It 'Start-Service starts the service without error' {
+        { Start-Service -Name $script:svcName } | Should -Not -Throw
+    }
+    It 'Stop-Service stops the service without error' {
+        { Stop-Service -Name $script:svcName } | Should -Not -Throw
+    }
+    It 'Remove-Service removes the unit file' {
+        { Remove-Service -Name $script:svcName } | Should -Not -Throw
+        { Get-Service -Name $script:svcName -ErrorAction Stop } | Should -Throw
+    }
+}
