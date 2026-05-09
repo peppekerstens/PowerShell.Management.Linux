@@ -18,12 +18,12 @@ BeforeDiscovery {
         'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
         'Get-ComputerInfo', 'Rename-Computer', 'Restart-Computer', 'Stop-Computer',
         'Resume-Service', 'Suspend-Service', 'Set-Service',
-        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+        'New-Service', 'Remove-Service', 'Set-TimeZone', 'Get-HotFix', 'Clear-RecycleBin'
     )
 
     $script:StubFunctions = @(
         'Resume-Service', 'Suspend-Service', 'Set-Service',
-        'New-Service', 'Remove-Service', 'Get-HotFix', 'Clear-RecycleBin'
+        'Get-HotFix', 'Clear-RecycleBin'
     )
 }
 
@@ -46,8 +46,8 @@ AfterAll {
 
 Describe 'PowerShell.Management.Linux module surface' -Skip:(-not $script:OnLinux) {
 
-    It 'exports exactly 15 functions' {
-        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 15
+    It 'exports exactly 16 functions' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 16
     }
 
     It 'exports 0 aliases' {
@@ -214,5 +214,41 @@ Describe 'Stub functions' -Skip:(-not $script:OnLinux) {
     It "'<fn>' emits a warning on Linux" -TestCases ($script:StubFunctions | ForEach-Object { @{ fn = $_ } }) {
         $warnings = & { & $fn } 3>&1 | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }
         $warnings | Should -Not -BeNullOrEmpty
+    }
+}
+
+# ---------------------------------------------------------------------------
+Describe 'New-Service' -Skip:(-not $script:OnLinux) {
+
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'New-Service'
+    }
+
+    It 'supports -WhatIf without error' {
+        { New-Service -Name 'test-pester-svc' -BinaryPathName '/bin/true' -WhatIf } | Should -Not -Throw
+    }
+}
+
+# ---------------------------------------------------------------------------
+Describe 'Remove-Service' -Skip:(-not $script:OnLinux) {
+
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Remove-Service'
+    }
+
+    It 'supports -WhatIf without error' {
+        { Remove-Service -Name 'test-pester-svc' -WhatIf } | Should -Not -Throw
+    }
+}
+
+# ---------------------------------------------------------------------------
+Describe 'Set-TimeZone' -Skip:(-not $script:OnLinux) {
+
+    It 'is exported' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Set-TimeZone'
+    }
+
+    It 'supports -WhatIf without error' {
+        { Set-TimeZone -Id 'UTC' -WhatIf } | Should -Not -Throw
     }
 }

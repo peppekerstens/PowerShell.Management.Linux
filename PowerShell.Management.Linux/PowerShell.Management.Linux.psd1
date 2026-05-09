@@ -4,7 +4,7 @@
 
 @{
     RootModule        = 'PowerShell.Management.Linux.psm1'
-    ModuleVersion     = '0.2.0'
+    ModuleVersion     = '0.3.0'
     GUID              = 'c3d4e5f6-a7b8-9012-cdef-123456789012'
     Author            = 'Peppe Kerstens'
     CompanyName       = ''
@@ -29,6 +29,7 @@
         'Set-Service',
         'New-Service',
         'Remove-Service',
+        'Set-TimeZone',
         'Get-HotFix',
         'Clear-RecycleBin'
     )
