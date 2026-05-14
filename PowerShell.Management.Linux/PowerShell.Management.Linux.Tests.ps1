@@ -16,7 +16,7 @@ BeforeDiscovery {
 
     $script:ExpectedFunctions = @(
         'Get-Service', 'Start-Service', 'Stop-Service', 'Restart-Service',
-        'Get-ComputerInfo', 'Rename-Computer', 'Restart-Computer', 'Stop-Computer',
+        'Get-ComputerInfo', 'Rename-Computer',
         'Resume-Service', 'Suspend-Service', 'Set-Service',
         'New-Service', 'Remove-Service', 'Set-TimeZone', 'Get-HotFix', 'Clear-RecycleBin'
     )
@@ -46,8 +46,8 @@ AfterAll {
 
 Describe 'PowerShell.Management.Linux module surface' -Skip:(-not $script:OnLinux) {
 
-    It 'exports exactly 16 functions' {
-        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 16
+    It 'exports exactly 14 functions' {
+        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Count | Should -Be 14
     }
 
     It 'exports 0 aliases' {
@@ -176,24 +176,6 @@ Describe 'Rename-Computer' -Skip:(-not $IsLinux) {
     }
     It 'supports -WhatIf without error' {
         { Rename-Computer -NewName 'test-hostname' -WhatIf } | Should -Not -Throw
-    }
-}
-
-Describe 'Restart-Computer' -Skip:(-not $IsLinux) {
-    It 'is exported' {
-        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Restart-Computer'
-    }
-    It 'supports -WhatIf without error' {
-        { Restart-Computer -WhatIf } | Should -Not -Throw
-    }
-}
-
-Describe 'Stop-Computer' -Skip:(-not $IsLinux) {
-    It 'is exported' {
-        (Get-Module PowerShell.Management.Linux).ExportedFunctions.Keys | Should -Contain 'Stop-Computer'
-    }
-    It 'supports -WhatIf without error' {
-        { Stop-Computer -WhatIf } | Should -Not -Throw
     }
 }
 

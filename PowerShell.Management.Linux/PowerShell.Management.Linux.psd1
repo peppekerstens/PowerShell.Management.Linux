@@ -4,12 +4,12 @@
 
 @{
     RootModule        = 'PowerShell.Management.Linux.psm1'
-    ModuleVersion     = '0.3.0'
+    ModuleVersion     = '0.4.0'
     GUID              = 'c3d4e5f6-a7b8-9012-cdef-123456789012'
     Author            = 'Peppe Kerstens'
     CompanyName       = ''
     Copyright         = '(c) Peppe Kerstens. GPL-3.0 license.'
-    Description       = 'PowerShell module for Linux providing cmdlet parity with Microsoft.PowerShell.Management. Implements Get-Service, Start-Service, Stop-Service, Restart-Service, Get-ComputerInfo, Rename-Computer, Restart-Computer and Stop-Computer using systemctl, hostnamectl, and shutdown.'
+    Description       = 'PowerShell module for Linux providing cmdlet parity with Microsoft.PowerShell.Management. Implements Get-Service, Start-Service, Stop-Service, Restart-Service, Get-ComputerInfo, and Rename-Computer using systemctl and hostnamectl.'
     PowerShellVersion = '7.2'
     RequiredModules   = @()
 
@@ -21,8 +21,7 @@
         'Restart-Service',
         'Get-ComputerInfo',
         'Rename-Computer',
-        'Restart-Computer',
-        'Stop-Computer',
+
         # Stubs (not-implemented on Linux)
         'Resume-Service',
         'Suspend-Service',
@@ -44,7 +43,10 @@
             LicenseUri   = 'https://github.com/peppekerstens/PowerShell.Management.Linux/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/peppekerstens/PowerShell.Management.Linux'
             ReleaseNotes = @'
-0.1.0 - Initial release. Get-Service, Start-Service, Stop-Service, Restart-Service (systemctl), Get-ComputerInfo, Rename-Computer, Restart-Computer, Stop-Computer. Stubs for Resume-Service, Suspend-Service, Set-Service, New-Service, Remove-Service, Get-HotFix, Clear-RecycleBin.
+0.4.0 - Removed Restart-Computer and Stop-Computer (already native cross-platform cmdlets — no override needed). See Part 16 blog post for details.
+0.3.0 - Get-Service rewritten to use systemctl list-units/list-unit-files --output=json. Eliminates text-split column parsing.
+0.2.0 - Linux-only guard added (throws on Windows). Get-ComputerInfo gains CsNumberOfLogicalProcessors and OsUptime.
+0.1.0 - Initial release. Get-Service, Start-Service, Stop-Service, Restart-Service, Get-ComputerInfo, Rename-Computer. Stubs for remaining 7.
 '@
         }
     }

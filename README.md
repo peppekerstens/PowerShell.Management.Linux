@@ -21,7 +21,7 @@ On **Linux**, wraps native CLI tools (`systemctl`, `hostnamectl`, `shutdown`, `/
 - PowerShell 7.2+
 - **Linux only** — the module refuses to load on Windows (throws a descriptive error)
 - Linux with `systemd` (`systemctl`, `hostnamectl`) — Ubuntu 20.04+, Debian 11+, etc.
-- Root / `sudo` required for `Rename-Computer`, `Restart-Computer`, `Stop-Computer`
+- Root / `sudo` required for `Rename-Computer`
 
 ---
 
@@ -55,9 +55,7 @@ Get-ComputerInfo -Property OsName, CsTotalPhysicalMemory
 # Rename the host (requires root)
 Rename-Computer -NewName myserver -Force
 
-# Shut down immediately (requires root)
-Stop-Computer
-```
+**Note:** `Restart-Computer` and `Stop-Computer` are not included in this module — they are already native cross-platform cmdlets in PowerShell 7. See [Part 16](https://peppekerstens.github.io/the-list-was-a-year-old-linux-command-wrapping-part-16/) for details.
 
 ---
 
@@ -73,8 +71,7 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 | `Restart-Service` | ✅ | `systemctl restart` | Pipeline input; `-PassThru`, `-Force`, `-WhatIf`, `-Confirm` |
 | `Get-ComputerInfo` | ✅ | `/etc/os-release`, `/proc/cpuinfo`, `/proc/meminfo`, `uname`, `hostnamectl`, `/proc/uptime` | `-Property` filter supported |
 | `Rename-Computer` | ✅ | `hostnamectl set-hostname` | Requires root; `-Force`, `-PassThru`, `-WhatIf`, `-Confirm` |
-| `Restart-Computer` | ✅ | `shutdown -r` | Requires root; `-Delay` (minutes, default 0) |
-| `Stop-Computer` | ✅ | `shutdown -h` | Requires root; `-Delay` (minutes, default 0) |
+
 | `Resume-Service` | ⚠️ | Stub | No general Linux equivalent for paused services |
 | `Suspend-Service` | ⚠️ | Stub | No general Linux equivalent |
 | `Set-Service` | ⚠️ | Stub | Future: `systemctl enable`/`disable` |
@@ -85,7 +82,7 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 
 ### Not included (already work natively in PS7 on Linux)
 
-`Get-Process`, `Stop-Process`, `Start-Process`, `Wait-Process`, `Get-TimeZone`, `Set-TimeZone`, `Get-ChildItem`, `Get-Item`, `Set-Item`, `Copy-Item`, `Move-Item`, `Remove-Item`, `Get-Content`, `Set-Content`, `Add-Content`, `Clear-Content`, `Get-Location`, `Set-Location`, `Push-Location`, `Pop-Location`, `Test-Path`, `Resolve-Path`, `Convert-Path`, `Join-Path`, `Split-Path`, `Get-PSDrive`, `New-PSDrive`, `Remove-PSDrive`, `Get-PSProvider`, `Get-ItemProperty`, `Set-ItemProperty`, `New-ItemProperty`, `Remove-ItemProperty`, `Clear-ItemProperty`, `Rename-Item`, `Rename-ItemProperty`, `New-Item`, `Invoke-Item`, `Get-Clipboard`, `Set-Clipboard`, `Test-Connection`, `Debug-Process`.
+`Restart-Computer`, `Stop-Computer`, `Get-Process`, `Stop-Process`, `Start-Process`, `Wait-Process`, `Get-TimeZone`, `Set-TimeZone`, `Get-ChildItem`, `Get-Item`, `Set-Item`, `Copy-Item`, `Move-Item`, `Remove-Item`, `Get-Content`, `Set-Content`, `Add-Content`, `Clear-Content`, `Get-Location`, `Set-Location`, `Push-Location`, `Pop-Location`, `Test-Path`, `Resolve-Path`, `Convert-Path`, `Join-Path`, `Split-Path`, `Get-PSDrive`, `New-PSDrive`, `Remove-PSDrive`, `Get-PSProvider`, `Get-ItemProperty`, `Set-ItemProperty`, `New-ItemProperty`, `Remove-ItemProperty`, `Clear-ItemProperty`, `Rename-Item`, `Rename-ItemProperty`, `New-Item`, `Invoke-Item`, `Get-Clipboard`, `Set-Clipboard`, `Test-Connection`, `Debug-Process`.
 
 ---
 
@@ -93,7 +90,7 @@ Legend: ✅ Implemented &nbsp;|&nbsp; ⚠️ Stub &nbsp;|&nbsp; ➖ N/A on Linux
 
 The starting point was figuring out what is actually missing. The Windows `Microsoft.PowerShell.Management` module exports 60 cmdlets. Many of them — all the filesystem and path cmdlets, process management, timezone — are implemented in cross-platform .NET and work fine in PowerShell 7 on Linux already. Wrapping those would just shadow the built-in implementations, which could cause subtle breakage. So the first task was a careful audit.
 
-After stripping out everything that already works, the gap is 15 cmdlets. Eight get full implementations, seven become stubs.
+After stripping out everything that already works, the gap is 13 cmdlets. Six get full implementations, seven become stubs.
 
 ### Service management: joining two systemctl outputs
 
@@ -135,7 +132,9 @@ One gotcha during development: `CsNumberOfLogicalProcessors` was initially imple
 
 ### Rename-Computer and the elevation check
 
-`hostnamectl set-hostname` requires root. The function checks `id -u` before calling it:
+`hostnamectl set-hostname` requires root. The function checks `id -u` before calling it.
+
+**Removed in v0.4.0:** `Restart-Computer` and `Stop-Computer` were originally included because they are part of `Microsoft.PowerShell.Management`. However, they are already native cross-platform cmdlets in PowerShell 7 (`ComputerUnix.cs` in the PS source tree ships them on all platforms). Overriding them with a module implementation creates confusion — importing this module changed the behaviour of working native cmdlets. The Stage 5 cmdlet gap refresh confirmed this. See [Part 16](https://peppekerstens.github.io/the-list-was-a-year-old-linux-command-wrapping-part-16/) for the full investigation.
 
 ```powershell
 if ((& id -u) -ne '0') {
@@ -188,9 +187,10 @@ GitHub Actions runs the same matrix on every push — see `.github/workflows/pes
 
 | Version | Notes |
 |---|---|
+| 0.4.0 | Removed `Restart-Computer` and `Stop-Computer` — they are already native cross-platform cmdlets in PowerShell 7 and should not be overridden. Count updated: 6 implemented, 7 stubs. |
 | 0.3.0 | `Get-Service` rewritten to use `systemctl list-units/list-unit-files --output=json`. Eliminates text-split column parsing; `HashSet` replaces linear `Where-Object` for duplicate detection. |
 | 0.2.0 | Linux-only guard added (throws on Windows). `Get-ComputerInfo` gains `CsNumberOfLogicalProcessors` and `OsUptime` properties; `-Property` filter fixed. Tests rewritten for Pester 5.2+: 60/60 pass on WSL2. |
-| 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer`, `Restart-Computer`, `Stop-Computer` implemented. Stubs for the remaining 7. |
+| 0.1.0 | Initial release. `Get-Service`, `Start-Service`, `Stop-Service`, `Restart-Service`, `Get-ComputerInfo`, `Rename-Computer` implemented. Stubs for remaining 7. |
 
 ---
 
