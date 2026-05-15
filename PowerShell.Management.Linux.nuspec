@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>PowerShell.Management.Linux</id>
+    <version>0.4.0</version>
+    <authors>peppekerstens</authors>
+    <description>PowerShell module for Linux providing cmdlet parity with Microsoft.PowerShell.Management. Implements Get-Service, Start-Service, Stop-Service, Restart-Service, Get-ComputerInfo, and Rename-Computer using systemctl and hostnamectl.</description>
+    <tags>PowerShell Linux pwsh Module Management</tags>
+    <projectUrl>https://github.com/peppekerstens/PowerShell.Management.Linux</projectUrl>
+    <license type="expression">GPL-3.0-only</license>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+  </metadata>
+  <files>
+    <file src="PowerShell.Management.Linux\**\*" target="PowerShell.Management.Linux" />
+    <file src="PSScriptAnalyzerSettings.psd1" target="PowerShell.Management.Linux" />
+  </files>
+</package>
+
+
